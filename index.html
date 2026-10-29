@@ -1,0 +1,525 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Juego de Emparejar: Medios de Transporte</title>
+    <!-- Tailwind CSS CDN -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Google Fonts -->
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&display=swap" rel="stylesheet">
+    <!-- Canvas Confetti Library -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+
+    <style>
+        body {
+            font-family: 'Fredoka', sans-serif;
+            background: linear-gradient(135deg, #6EE7B7 0%, #3B82F6 50%, #9333EA 100%);
+            min-height: 100vh;
+        }
+
+        /* Card Styles & 3D Flip */
+        .card-container {
+            perspective: 1000px;
+        }
+
+        .card-inner {
+            position: relative;
+            width: 100%;
+            height: 100%;
+            transition: transform 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+            transform-style: preserve-3d;
+            cursor: pointer;
+        }
+
+        .card-container.flipped .card-inner {
+            transform: rotateY(180deg);
+        }
+
+        .card-front, .card-back {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            -webkit-backface-visibility: hidden;
+            border-radius: 1.25rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.2), 0 4px 6px -2px rgba(0, 0, 0, 0.05);
+        }
+
+        /* Card Back (Hidden/Pattern side) */
+        .card-back {
+            background: linear-gradient(135deg, #FF6B6B 0%, #FF8E53 100%);
+            border: 4px solid #FFFFFF;
+            transform: rotateY(0deg);
+        }
+
+        /* Card Front (Revealed Content) */
+        .card-front {
+            background: #FFFFFF;
+            border: 4px solid #3B82F6;
+            transform: rotateY(180deg);
+        }
+
+        /* Matched status animation */
+        .card-container.matched {
+            animation: pulse-success 0.6s ease-in-out forwards;
+        }
+
+        .card-container.matched .card-front {
+            border-color: #10B981;
+            background-color: #ECFDF5;
+        }
+
+        @keyframes pulse-success {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.08); }
+            100% { transform: scale(1); }
+        }
+
+        /* Wrong match animation */
+        .card-container.shake {
+            animation: shake 0.5s ease-in-out;
+        }
+
+        @keyframes shake {
+            0%, 100% { transform: translateX(0); }
+            20%, 60% { transform: translateX(-8px); }
+            40%, 80% { transform: translateX(8px); }
+        }
+
+        /* Floating elements dynamic animation */
+        .floating-bg {
+            position: absolute;
+            pointer-events: none;
+            opacity: 0.15;
+            z-index: 0;
+            animation: float 15s infinite linear;
+        }
+
+        @keyframes float {
+            0% { transform: translateY(100vh) rotate(0deg); }
+            100% { transform: translateY(-100px) rotate(360deg); }
+        }
+    </style>
+</head>
+<body class="flex flex-col items-center justify-between p-4 min-h-screen relative overflow-x-hidden">
+
+    <!-- Background decorative floating icons -->
+    <div id="bg-floating-container"></div>
+
+    <!-- Main Container -->
+    <div class="z-10 w-full max-w-4xl flex flex-col items-center">
+        
+        <!-- Header Section -->
+        <header class="text-center my-4 bg-white/80 backdrop-blur-md px-6 py-4 rounded-3xl shadow-xl w-full border-4 border-yellow-300">
+            <h1 class="text-3xl sm:text-4xl md:text-5xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-indigo-800 tracking-wide drop-shadow-sm">
+                🚀 Transporte Match! 🚢
+            </h1>
+            <p class="text-gray-700 text-sm sm:text-base font-semibold mt-1">
+                ¡Encuentra las parejas relacionando cada vehículo con su concepto!
+            </p>
+        </header>
+
+        <!-- Stats Bar -->
+        <div class="flex flex-wrap justify-between items-center w-full max-w-xl bg-white/90 rounded-2xl p-4 mb-6 shadow-lg border-2 border-white/50 text-gray-800 font-bold text-lg sm:text-xl gap-2">
+            <div class="flex items-center space-x-2 text-blue-600">
+                <i class="fa-solid fa-trophy text-yellow-500 text-2xl"></i>
+                <span>Puntos: <span id="score">0</span></span>
+            </div>
+            <div class="flex items-center space-x-2 text-indigo-600">
+                <i class="fa-solid fa-arrows-rotate text-indigo-500 text-2xl"></i>
+                <span>Movimientos: <span id="moves">0</span></span>
+            </div>
+            <button id="restart-btn" class="bg-gradient-to-r from-green-400 to-emerald-600 hover:from-green-500 hover:to-emerald-700 text-white px-4 py-2 rounded-xl shadow-md transition-all transform hover:scale-105 active:scale-95 flex items-center gap-2 text-base">
+                <i class="fa-solid fa-rotate-right"></i> Reiniciar
+            </button>
+        </div>
+
+        <!-- Game Board -->
+        <main id="game-board" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 w-full max-w-4xl mb-8">
+            <!-- Cards will be dynamically inserted here via JS -->
+        </main>
+    </div>
+
+    <!-- Footer -->
+    <footer class="z-10 text-white/90 font-medium text-xs sm:text-sm text-center mb-2">
+        Aprende jugando • Juego Educativo de Medios de Transporte
+    </footer>
+
+    <!-- Victory Modal -->
+    <div id="victory-modal" class="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 hidden opacity-0 transition-opacity duration-300">
+        <div class="bg-white rounded-3xl p-6 sm:p-8 max-w-md w-11/12 text-center shadow-2xl border-4 border-yellow-400 transform scale-90 transition-transform duration-300 id-modal-card">
+            
+            <div class="text-6xl mb-4 animate-bounce">🏆</div>
+            
+            <h2 class="text-3xl sm:text-4xl font-extrabold text-transparent bg-clip-text bg-gradient-to-r from-yellow-500 to-red-500 mb-2">
+                ¡Felicidades!
+            </h2>
+            <p class="text-gray-600 font-semibold text-lg mb-6">
+                ¡Has completado todos los emparejamientos con éxito!
+            </p>
+
+            <div class="bg-blue-50 rounded-2xl p-4 mb-6 border border-blue-100 text-left space-y-2">
+                <div class="flex justify-between items-center text-gray-700">
+                    <span><i class="fa-solid fa-bullseye text-blue-500 mr-2"></i>Puntuación Final:</span>
+                    <span id="final-score" class="font-bold text-xl text-blue-600">0</span>
+                </div>
+                <div class="flex justify-between items-center text-gray-700">
+                    <span><i class="fa-solid fa-stopwatch text-indigo-500 mr-2"></i>Movimientos:</span>
+                    <span id="final-moves" class="font-bold text-xl text-indigo-600">0</span>
+                </div>
+            </div>
+
+            <button id="modal-restart-btn" class="w-full bg-gradient-to-r from-yellow-400 via-orange-500 to-red-500 hover:from-yellow-500 hover:to-red-600 text-white font-extrabold text-lg py-3 rounded-2xl shadow-lg transform transition active:scale-95 hover:scale-105 flex items-center justify-center gap-2">
+                <i class="fa-solid fa-play"></i> ¡Jugar de Nuevo!
+            </button>
+        </div>
+    </div>
+
+    <!-- JavaScript Game Logic -->
+    <script>
+        // Concept Pairs (Transport Icon/Name <-> Concept Description)
+        const transportPairs = [
+            {
+                id: 1,
+                type: 'item',
+                title: 'Avión',
+                icon: 'fa-plane',
+                color: 'text-sky-500',
+                pairId: 'avion'
+            },
+            {
+                id: 2,
+                type: 'concept',
+                text: 'Vuela por el cielo transportando pasajeros a distancias largas.',
+                category: 'Aéreo ☁️',
+                pairId: 'avion'
+            },
+            {
+                id: 3,
+                type: 'item',
+                title: 'Barco',
+                icon: 'fa-ship',
+                color: 'text-blue-600',
+                pairId: 'barco'
+            },
+            {
+                id: 4,
+                type: 'concept',
+                text: 'Navega por océanos y mares llevando grandes cargas.',
+                category: 'Marítimo 🌊',
+                pairId: 'barco'
+            },
+            {
+                id: 5,
+                type: 'item',
+                title: 'Tren',
+                icon: 'fa-train',
+                color: 'text-emerald-600',
+                pairId: 'tren'
+            },
+            {
+                id: 6,
+                type: 'concept',
+                text: 'Se desplaza sobre rieles o vías de acero por tierra.',
+                category: 'Terrestre 🚂',
+                pairId: 'tren'
+            },
+            {
+                id: 7,
+                type: 'item',
+                title: 'Bicicleta',
+                icon: 'fa-bicycle',
+                color: 'text-orange-500',
+                pairId: 'bicicleta'
+            },
+            {
+                id: 8,
+                type: 'concept',
+                text: 'Vehículo ecológico de dos ruedas impulsado a pedales.',
+                category: 'Ecológico 🚲',
+                pairId: 'bicicleta'
+            },
+            {
+                id: 9,
+                type: 'item',
+                title: 'Helicóptero',
+                icon: 'fa-helicopter',
+                color: 'text-purple-600',
+                pairId: 'helicoptero'
+            },
+            {
+                id: 10,
+                type: 'concept',
+                text: 'Tiene hélices giratorias que le permiten despegar verticalmente.',
+                category: 'Aéreo 🚁',
+                pairId: 'helicoptero'
+            },
+            {
+                id: 11,
+                type: 'item',
+                title: 'Submarino',
+                icon: 'fa-water',
+                color: 'text-indigo-800',
+                pairId: 'submarino'
+            },
+            {
+                id: 12,
+                type: 'concept',
+                text: 'Capaz de navegar y sumergirse completamente bajo el agua.',
+                category: 'Subacuático 🌊',
+                pairId: 'submarino'
+            }
+        ];
+
+        // State variables
+        let cards = [];
+        let flippedCards = [];
+        let matchedPairsCount = 0;
+        let score = 0;
+        let moves = 0;
+        let isLockBoard = false;
+
+        // Sound Synthesis (Web Audio API)
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+
+        function playSound(type) {
+            if (audioCtx.state === 'suspended') {
+                audioCtx.resume();
+            }
+            const osc = audioCtx.createOscillator();
+            const gain = audioCtx.createGain();
+            osc.connect(gain);
+            gain.connect(audioCtx.destination);
+
+            const now = audioCtx.currentTime;
+
+            if (type === 'flip') {
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(300, now);
+                osc.frequency.exponentialRampToValueAtTime(500, now + 0.1);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+                osc.start(now);
+                osc.stop(now + 0.1);
+            } else if (type === 'match') {
+                osc.type = 'triangle';
+                osc.frequency.setValueAtTime(400, now);
+                osc.frequency.setValueAtTime(600, now + 0.1);
+                osc.frequency.setValueAtTime(800, now + 0.2);
+                gain.gain.setValueAtTime(0.3, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+                osc.start(now);
+                osc.stop(now + 0.35);
+            } else if (type === 'wrong') {
+                osc.type = 'sawtooth';
+                osc.frequency.setValueAtTime(220, now);
+                osc.frequency.setValueAtTime(180, now + 0.15);
+                gain.gain.setValueAtTime(0.2, now);
+                gain.gain.exponentialRampToValueAtTime(0.01, now + 0.3);
+                osc.start(now);
+                osc.stop(now + 0.3);
+            } else if (type === 'victory') {
+                const notes = [300, 400, 500, 600, 800];
+                notes.forEach((freq, idx) => {
+                    const o = audioCtx.createOscillator();
+                    const g = audioCtx.createGain();
+                    o.connect(g);
+                    g.connect(audioCtx.destination);
+                    o.frequency.setValueAtTime(freq, now + idx * 0.1);
+                    g.gain.setValueAtTime(0.2, now + idx * 0.1);
+                    g.gain.exponentialRampToValueAtTime(0.01, now + idx * 0.1 + 0.2);
+                    o.start(now + idx * 0.1);
+                    o.stop(now + idx * 0.1 + 0.2);
+                });
+            }
+        }
+
+        // Shuffle Array Function
+        function shuffle(array) {
+            let currentIndex = array.length, randomIndex;
+            while (currentIndex !== 0) {
+                randomIndex = Math.floor(Math.random() * currentIndex);
+                currentIndex--;
+                [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
+            }
+            return array;
+        }
+
+        // Initialize Game
+        function initGame() {
+            const gameBoard = document.getElementById('game-board');
+            gameBoard.innerHTML = '';
+            
+            flippedCards = [];
+            matchedPairsCount = 0;
+            score = 0;
+            moves = 0;
+            isLockBoard = false;
+
+            updateStats();
+
+            // Shuffle cards
+            cards = shuffle([...transportPairs]);
+
+            // Render cards
+            cards.forEach((item, index) => {
+                const cardContainer = document.createElement('div');
+                cardContainer.className = 'card-container h-36 sm:h-44 w-full';
+                cardContainer.dataset.index = index;
+                cardContainer.dataset.pairId = item.pairId;
+
+                let frontContent = '';
+                if (item.type === 'item') {
+                    frontContent = `
+                        <i class="fa-solid ${item.icon} text-4xl sm:text-5xl ${item.color} mb-2"></i>
+                        <span class="font-bold text-gray-800 text-base sm:text-lg text-center px-1">${item.title}</span>
+                    `;
+                } else {
+                    frontContent = `
+                        <span class="text-xs font-bold text-indigo-500 uppercase tracking-wider mb-1">${item.category}</span>
+                        <p class="text-xs sm:text-sm font-semibold text-gray-700 text-center px-2 leading-tight">${item.text}</p>
+                    `;
+                }
+
+                cardContainer.innerHTML = `
+                    <div class="card-inner">
+                        <div class="card-back">
+                            <i class="fa-solid fa-compass text-white/80 text-3xl sm:text-4xl"></i>
+                        </div>
+                        <div class="card-front p-2">
+                            ${frontContent}
+                        </div>
+                    </div>
+                `;
+
+                cardContainer.addEventListener('click', () => handleCardClick(cardContainer));
+                gameBoard.appendChild(cardContainer);
+            });
+
+            // Close victory modal if open
+            const modal = document.getElementById('victory-modal');
+            modal.classList.add('hidden');
+            modal.classList.remove('opacity-100');
+        }
+
+        // Handle Card Click
+        function handleCardClick(card) {
+            if (isLockBoard) return;
+            if (card.classList.contains('flipped') || card.classList.contains('matched')) return;
+
+            playSound('flip');
+            card.classList.add('flipped');
+            flippedCards.push(card);
+
+            if (flippedCards.length === 2) {
+                moves++;
+                updateStats();
+                checkMatch();
+            }
+        }
+
+        // Check Match Logic
+        function checkMatch() {
+            isLockBoard = true;
+            const [card1, card2] = flippedCards;
+            const isMatch = card1.dataset.pairId === card2.dataset.pairId;
+
+            if (isMatch) {
+                setTimeout(() => {
+                    playSound('match');
+                    card1.classList.add('matched');
+                    card2.classList.add('matched');
+
+                    score += 100;
+                    matchedPairsCount++;
+                    updateStats();
+
+                    flippedCards = [];
+                    isLockBoard = false;
+
+                    if (matchedPairsCount === transportPairs.length / 2) {
+                        handleVictory();
+                    }
+                }, 400);
+            } else {
+                setTimeout(() => {
+                    playSound('wrong');
+                    card1.classList.add('shake');
+                    card2.classList.add('shake');
+                }, 400);
+
+                setTimeout(() => {
+                    card1.classList.remove('flipped', 'shake');
+                    card2.classList.remove('flipped', 'shake');
+                    flippedCards = [];
+                    isLockBoard = false;
+                }, 1200);
+            }
+        }
+
+        // Update Score Board
+        function updateStats() {
+            document.getElementById('score').textContent = score;
+            document.getElementById('moves').textContent = moves;
+        }
+
+        // Handle Victory
+        function handleVictory() {
+            setTimeout(() => {
+                playSound('victory');
+                
+                // Trigger Confetti
+                confetti({
+                    particleCount: 120,
+                    spread: 70,
+                    origin: { y: 0.6 }
+                });
+
+                document.getElementById('final-score').textContent = score;
+                document.getElementById('final-moves').textContent = moves;
+
+                const modal = document.getElementById('victory-modal');
+                modal.classList.remove('hidden');
+                setTimeout(() => {
+                    modal.classList.add('opacity-100');
+                }, 50);
+            }, 600);
+        }
+
+        // Generate Background Floating Icons
+        function createFloatingBackground() {
+            const container = document.getElementById('bg-floating-container');
+            const icons = ['fa-plane', 'fa-ship', 'fa-car', 'fa-bus', 'fa-bicycle', 'fa-helicopter', 'fa-train', 'fa-rocket'];
+            
+            for (let i = 0; i < 15; i++) {
+                const iconElem = document.createElement('i');
+                const randomIcon = icons[Math.floor(Math.random() * icons.length)];
+                
+                iconElem.className = `fa-solid ${randomIcon} floating-bg text-white text-3xl sm:text-5xl`;
+                iconElem.style.left = `${Math.random() * 100}%`;
+                iconElem.style.animationDuration = `${10 + Math.random() * 15}s`;
+                iconElem.style.animationDelay = `${Math.random() * 5}s`;
+                
+                container.appendChild(iconElem);
+            }
+        }
+
+        // Event Listeners
+        document.getElementById('restart-btn').addEventListener('click', initGame);
+        document.getElementById('modal-restart-btn').addEventListener('click', initGame);
+
+        // Window Load Initialization
+        window.onload = function() {
+            createFloatingBackground();
+            initGame();
+        };
+    </script>
+</body>
+</html>
